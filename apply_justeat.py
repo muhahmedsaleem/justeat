@@ -15,7 +15,7 @@ EMAIL = os.environ.get("EMAIL", "ahmedmughal919530@gmail.com")
 PHONE = os.environ.get("PHONE", "3784366484")
 INVITE_CODE = os.environ.get("INVITE_CODE", "1484852")
 
-# UPDATED URL: Links directly to Pisa to skip the dropdown step entirely when possible
+# UPDATED URL: Links directly to Pisa
 TARGET_URL = "https://www.justeat.it/rider/pisa?utm_source=RAF&utm_medium=RAFprogram&utm_campaign=Drivers&utm_term=RAF_1.0_DE&utm_content=blank&raf_id=9aab402d659e73d42cb6793599d61fb3"
 
 def send_telegram(message: str):
@@ -44,29 +44,25 @@ async def run():
         print(f"Navigating to {TARGET_URL}...")
         await page.goto(TARGET_URL, wait_until="networkidle")
 
-        # Accept cookie banner if present
+        # --- NEW: Aggressively remove cookie banners from the page ---
         try:
-            accept_cookies = page.locator("button:has-text('Accetta'):visible, button:has-text('Accept'):visible, #onetrust-accept-btn-handler:visible")
-            if await accept_cookies.count() > 0:
-                await accept_cookies.first.click()
+            await page.evaluate("""() => {
+                document.querySelectorAll('#pie_cookie_bar, pie-cookie-banner, #onetrust-consent-sdk').forEach(el => el.remove());
+            }""")
         except Exception:
             pass
 
         # --- STEP 1: Select City & Apply ---
         print("Checking city selection...")
-        
         try:
-            # Target the visible city dropdown, explicitly ignoring hidden/disabled buttons
             city_dropdown = page.locator("button:not([disabled]):visible, div[role='button']:visible").filter(has_text=re.compile(r"Pisa|Seleziona", re.I)).first
-            
             if await city_dropdown.is_visible(timeout=5000):
-                await city_dropdown.click()
+                await city_dropdown.click(force=True) # Forced click bypasses overlays
                 await page.wait_for_timeout(1000)
 
-                # Click Pisa in the dropdown options
                 pisa_option = page.locator(f"text={TARGET_CITY}:visible").first
                 if await pisa_option.is_visible():
-                    await pisa_option.click()
+                    await pisa_option.click(force=True)
                     await page.wait_for_timeout(1000)
         except Exception:
             print("City dropdown interaction skipped (likely already selected by URL).")
@@ -75,14 +71,14 @@ async def run():
         print("Clicking Apply button...")
         apply_btn = page.locator("button:has-text('Candidati ora'):not([disabled]):visible, a:has-text('Candidati ora'):visible").first
         await apply_btn.wait_for(state="visible", timeout=10000)
-        await apply_btn.click()
+        await apply_btn.click(force=True) # Forced click bypasses overlays
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 2: Requirements checklist ---
         print("Passing Step 2...")
         proceed_btn = page.locator("button:has-text('Procedi')").first
         await proceed_btn.wait_for(state="visible", timeout=10000)
-        await proceed_btn.click()
+        await proceed_btn.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 3: Personal details ---
@@ -102,16 +98,16 @@ async def run():
         # WhatsApp option: click 'Sì'
         si_whatsapp = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
         if await si_whatsapp.is_visible():
-            await si_whatsapp.click()
+            await si_whatsapp.click(force=True)
 
-        await page.locator("button:has-text('Procedi')").first.click()
+        await page.locator("button:has-text('Procedi')").first.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 3B: Invite code ---
         print("Handling referral code...")
         si_invite = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
         if await si_invite.is_visible():
-            await si_invite.click()
+            await si_invite.click(force=True)
             invite_input = page.locator("input[name*='code'], input[placeholder*='invito'], input[type='text']").first
             await invite_input.fill(INVITE_CODE)
 
@@ -119,23 +115,23 @@ async def run():
             if await ref_check.is_visible() and not await ref_check.is_checked():
                 await ref_check.check(force=True)
 
-            await page.locator("button:has-text('Procedi')").first.click()
+            await page.locator("button:has-text('Procedi')").first.click(force=True)
             await page.wait_for_load_state("networkidle")
 
         # --- STEP 4: Age verification ---
         print("Confirming age...")
         si_age = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
         await si_age.wait_for(state="visible", timeout=10000)
-        await si_age.click()
-        await page.locator("button:has-text('Procedi')").first.click()
+        await si_age.click(force=True)
+        await page.locator("button:has-text('Procedi')").first.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 4B: Shift preference ---
         print("Selecting shift...")
         dinner_shift = page.locator("text='Orario di cena, sia in settimana che nel weekend'").first
         await dinner_shift.wait_for(state="visible", timeout=10000)
-        await dinner_shift.click()
-        await page.locator("button:has-text('Procedi')").first.click()
+        await dinner_shift.click(force=True)
+        await page.locator("button:has-text('Procedi')").first.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 4C: Vehicle Selection ---
@@ -147,10 +143,10 @@ async def run():
         
         if await ebike_option.is_visible():
             print("⚡ Electric bike option FOUND! Selecting it...")
-            await ebike_option.click()
+            await ebike_option.click(force=True)
             await page.wait_for_timeout(1000)
             
-            await page.locator("button:has-text('Procedi')").first.click()
+            await page.locator("button:has-text('Procedi')").first.click(force=True)
             
             send_telegram(
                 f"🎉 *Just Eat Pisa Alert!*\n\n"
