@@ -46,7 +46,7 @@ async def run():
 
         # Accept cookie banner if present
         try:
-            accept_cookies = page.locator("button:has-text('Accetta'), button:has-text('Accept'), #onetrust-accept-btn-handler").filter(state="visible")
+            accept_cookies = page.locator("button:has-text('Accetta'):visible, button:has-text('Accept'):visible, #onetrust-accept-btn-handler:visible")
             if await accept_cookies.count() > 0:
                 await accept_cookies.first.click()
         except Exception:
@@ -57,14 +57,14 @@ async def run():
         
         try:
             # Target the visible city dropdown, explicitly ignoring hidden/disabled buttons
-            city_dropdown = page.locator("button:not([disabled]), div[role='button']").filter(has_text=re.compile(r"Pisa|Seleziona", re.I)).filter(state="visible").first
+            city_dropdown = page.locator("button:not([disabled]):visible, div[role='button']:visible").filter(has_text=re.compile(r"Pisa|Seleziona", re.I)).first
             
             if await city_dropdown.is_visible(timeout=5000):
                 await city_dropdown.click()
                 await page.wait_for_timeout(1000)
 
                 # Click Pisa in the dropdown options
-                pisa_option = page.locator(f"text={TARGET_CITY}").filter(state="visible").first
+                pisa_option = page.locator(f"text={TARGET_CITY}:visible").first
                 if await pisa_option.is_visible():
                     await pisa_option.click()
                     await page.wait_for_timeout(1000)
@@ -73,7 +73,7 @@ async def run():
 
         # Click 'Candidati ora'
         print("Clicking Apply button...")
-        apply_btn = page.locator("button:has-text('Candidati ora'):not([disabled]), a:has-text('Candidati ora')").filter(state="visible").first
+        apply_btn = page.locator("button:has-text('Candidati ora'):not([disabled]):visible, a:has-text('Candidati ora'):visible").first
         await apply_btn.wait_for(state="visible", timeout=10000)
         await apply_btn.click()
         await page.wait_for_load_state("networkidle")
