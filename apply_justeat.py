@@ -1,0 +1,166 @@
+import os
+import re
+import asyncio
+from playwright.async_api import async_playwright
+import requests
+
+# Secrets / Config
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+TARGET_CITY = "Pisa"
+FIRST_NAME = os.environ.get("FIRST_NAME", "Muhammad Ahmed")
+LAST_NAME = os.environ.get("LAST_NAME", "Saleem")
+EMAIL = os.environ.get("EMAIL", "ahmedmughal919530@gmail.com")
+PHONE = os.environ.get("PHONE", "3784366484")
+INVITE_CODE = os.environ.get("INVITE_CODE", "1484852")
+TARGET_URL = "https://www.justeat.it/rider/?city=blank&utm_source=RAF&utm_medium=RAFprogram&utm_campaign=Drivers&utm_term=RAF_1.0_DE&utm_content=blank&raf_id=9aab402d659e73d42cb6793599d61fb3"
+
+def send_telegram(message: str):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print(f"[Telegram Not Configured] {message}")
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "Markdown"}
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print(f"Failed to send Telegram message: {e}")
+
+async def run():
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
+        context = await browser.new_context(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            locale="it-IT"
+        )
+        page = await context.new_page()
+
+        print(f"Navigating to {TARGET_URL}...")
+        await page.goto(TARGET_URL, wait_until="networkidle")
+
+        # Accept cookie banner if present
+        try:
+            accept_cookies = page.locator("button:has-text('Accetta'), button:has-text('Accept'), #onetrust-accept-btn-handler")
+            if await accept_cookies.first.is_visible(timeout=3000):
+                await accept_cookies.first.click()
+        except Exception:
+            pass
+
+        # --- STEP 1: Select City ---
+        print("Selecting city...")
+        city_button = page.locator("button, div[role='button'], select").filter(has_text=re.compile(r"Pisa|Seleziona", re.I))
+        if await city_button.count() > 0:
+            await city_button.first.click()
+            await page.wait_for_timeout(1000)
+
+        # Look for Pisa in the dropdown options
+        pisa_option = page.locator(f"text='{TARGET_CITY}'").first
+        if not await pisa_option.is_visible():
+            print(f"Applications for {TARGET_CITY} are currently not selectable.")
+            await browser.close()
+            return
+
+        await pisa_option.click()
+        await page.wait_for_timeout(1000)
+
+        # Click 'Candidati ora'
+        apply_btn = page.locator("button:has-text('Candidati ora'), a:has-text('Candidati ora')").first
+        await apply_btn.click()
+        await page.wait_for_load_state("networkidle")
+
+        # --- STEP 2: Passo 2 (Cosa ti serve) ---
+        print("Passing Step 2 (Requirements checklist)...")
+        proceed_btn = page.locator("button:has-text('Procedi')").first
+        await proceed_btn.wait_for(state="visible", timeout=10000)
+        await proceed_btn.click()
+        await page.wait_for_load_state("networkidle")
+
+        # --- STEP 3: Passo 3 (Informazioni personali) ---
+        print("Filling personal details...")
+        await page.locator("input[name*='name'], input[placeholder*='Nome'], label:has-text('Nome') + input, input").nth(0).fill(FIRST_NAME)
+        await page.locator("input[name*='surname'], input[name*='cognome'], label:has-text('Cognome') + input, input").nth(1).fill(LAST_NAME)
+        await page.locator("input[type='email'], input[name*='email']").first.fill(EMAIL)
+        await page.locator("input[type='tel'], input[name*='phone'], input[name*='telefono']").first.fill(PHONE)
+
+        # Checkboxes
+        checkboxes = page.locator("input[type='checkbox']")
+        checkbox_count = await checkboxes.count()
+        for i in range(checkbox_count):
+            if not await checkboxes.nth(i).is_checked():
+                await checkboxes.nth(i).check(force=True)
+
+        # WhatsApp option: click 'Sì'
+        si_whatsapp = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
+        if await si_whatsapp.is_visible():
+            await si_whatsapp.click()
+
+        await page.locator("button:has-text('Procedi')").first.click()
+        await page.wait_for_load_state("networkidle")
+
+        # --- STEP 3B: Invite code ---
+        print("Handling referral code...")
+        si_invite = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
+        if await si_invite.is_visible():
+            await si_invite.click()
+            invite_input = page.locator("input[name*='code'], input[placeholder*='invito'], input[type='text']").first
+            await invite_input.fill(INVITE_CODE)
+
+            # Referral terms checkbox
+            ref_check = page.locator("input[type='checkbox']").first
+            if await ref_check.is_visible() and not await ref_check.is_checked():
+                await ref_check.check(force=True)
+
+            await page.locator("button:has-text('Procedi')").first.click()
+            await page.wait_for_load_state("networkidle")
+
+        # --- STEP 4: Passo 4 (Age verification) ---
+        print("Confirming age (18+)...")
+        si_age = page.locator("button:has-text('Sì'), div[role='button']:has-text('Sì')").first
+        await si_age.wait_for(state="visible", timeout=10000)
+        await si_age.click()
+        await page.locator("button:has-text('Procedi')").first.click()
+        await page.wait_for_load_state("networkidle")
+
+        # --- STEP 4B: Shift preference ---
+        print("Selecting shift preference...")
+        dinner_shift = page.locator("text='Orario di cena, sia in settimana che nel weekend'").first
+        await dinner_shift.wait_for(state="visible", timeout=10000)
+        await dinner_shift.click()
+        await page.locator("button:has-text('Procedi')").first.click()
+        await page.wait_for_load_state("networkidle")
+
+        # --- STEP 4C: Vehicle Selection ---
+        print("Checking vehicle selection options...")
+        await page.wait_for_timeout(2000)
+
+        # Look for Electric Bike / E-Bike options
+        ebike_option = page.locator("text=/e-bike|bici elettrica|electric bike|bicicletta elettrica/i").first
+        
+        if await ebike_option.is_visible():
+            print("⚡ Electric bike option FOUND! Selecting it...")
+            await ebike_option.click()
+            await page.wait_for_timeout(1000)
+            
+            # Click Procedi to complete or proceed to final step
+            await page.locator("button:has-text('Procedi')").first.click()
+            
+            send_telegram(
+                f"🎉 *Just Eat Pisa Alert!*\n\n"
+                f"Successfully reached the vehicle selection and selected *Electric Bike* for {TARGET_CITY}!\n"
+                f"Check your application status or email to finalize: {TARGET_URL}"
+            )
+        else:
+            print("Electric bike is currently NOT listed among the available vehicles.")
+            send_telegram(
+                f"⚠️ *Just Eat Alert ({TARGET_CITY})*\n\n"
+                f"Pisa application reached Step 4, but *Electric Bike* is not available right now."
+            )
+
+        await browser.close()
+
+if __name__ == "__main__":
+    asyncio.run(run())
