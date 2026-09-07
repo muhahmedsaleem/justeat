@@ -2,8 +2,8 @@ name: Auto Apply Just Eat Pisa
 
 on:
   schedule:
-    - cron: '*/30 * * * *'  # Runs every 30 minutes
-  workflow_dispatch:        # Allows manual trigger button
+    - cron: '*/5 * * * *'  # Runs every 5 minutes (the fastest GitHub allows)
+  workflow_dispatch:
 
 jobs:
   run-apply:
