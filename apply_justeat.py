@@ -44,20 +44,43 @@ async def run():
         print(f"Navigating to {TARGET_URL}...")
         await page.goto(TARGET_URL, wait_until="networkidle")
 
-        # --- NEW: Aggressively remove cookie banners from the page ---
+        # --- THE ULTIMATE COOKIE BANNER FIX ---
+        print("Neutralizing cookie banners...")
+        await page.wait_for_timeout(2000) # Give the banner a second to render
+        
+        # 1. Try clicking accept just in case it's a standard button
         try:
-            await page.evaluate("""() => {
-                document.querySelectorAll('#pie_cookie_bar, pie-cookie-banner, #onetrust-consent-sdk').forEach(el => el.remove());
-            }""")
+            accept_btn = page.locator("button:has-text('Accetta'), button:has-text('Accept'), [data-test-id='accept-all-cookies']").first
+            if await accept_btn.is_visible(timeout=2000):
+                await accept_btn.click(force=True)
+                await page.wait_for_timeout(1000)
         except Exception:
             pass
+
+        # 2. Inject CSS to permanently hide ANY overlay that tries to block the screen
+        await page.add_style_tag(content="""
+            #pie_cookie_bar, 
+            pie-cookie-banner, 
+            .cookie-overlay, 
+            .modal__open,
+            .cookie_bar,
+            #onetrust-consent-sdk { 
+                display: none !important; 
+                opacity: 0 !important;
+                visibility: hidden !important;
+                pointer-events: none !important; 
+                z-index: -99999 !important; 
+            }
+        """)
+        await page.wait_for_timeout(1000)
+        # ----------------------------------------
 
         # --- STEP 1: Select City & Apply ---
         print("Checking city selection...")
         try:
             city_dropdown = page.locator("button:not([disabled]):visible, div[role='button']:visible").filter(has_text=re.compile(r"Pisa|Seleziona", re.I)).first
             if await city_dropdown.is_visible(timeout=5000):
-                await city_dropdown.click(force=True) # Forced click bypasses overlays
+                await city_dropdown.click(force=True)
                 await page.wait_for_timeout(1000)
 
                 pisa_option = page.locator(f"text={TARGET_CITY}:visible").first
@@ -71,7 +94,7 @@ async def run():
         print("Clicking Apply button...")
         apply_btn = page.locator("button:has-text('Candidati ora'):not([disabled]):visible, a:has-text('Candidati ora'):visible").first
         await apply_btn.wait_for(state="visible", timeout=10000)
-        await apply_btn.click(force=True) # Forced click bypasses overlays
+        await apply_btn.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 2: Requirements checklist ---
