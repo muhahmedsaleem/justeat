@@ -1,7 +1,7 @@
 import os
 import re
 import asyncio
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 import requests
 
 # Secrets / Config
@@ -17,6 +17,16 @@ INVITE_CODE = os.environ.get("INVITE_CODE", "1484852")
 
 # UPDATED URL: Links directly to Pisa
 TARGET_URL = "https://www.justeat.it/rider/pisa?utm_source=RAF&utm_medium=RAFprogram&utm_campaign=Drivers&utm_term=RAF_1.0_DE&utm_content=blank&raf_id=9aab402d659e73d42cb6793599d61fb3"
+
+
+async def remove_cookie_overlays(page):
+    try:
+        await page.evaluate("""() => {
+            document.querySelectorAll('#pie_cookie_bar, pie-cookie-banner, #onetrust-consent-sdk, .cookie-overlay').forEach(el => el.remove());
+        }""")
+    except Exception:
+        pass
+
 
 def send_telegram(message: str):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
@@ -45,12 +55,7 @@ async def run():
         await page.goto(TARGET_URL, wait_until="networkidle")
 
         # --- NEW: Aggressively remove cookie banners from the page ---
-        try:
-            await page.evaluate("""() => {
-                document.querySelectorAll('#pie_cookie_bar, pie-cookie-banner, #onetrust-consent-sdk').forEach(el => el.remove());
-            }""")
-        except Exception:
-            pass
+        await remove_cookie_overlays(page)
 
         # --- STEP 1: Select City & Apply ---
         print("Checking city selection...")
@@ -71,7 +76,11 @@ async def run():
         print("Clicking Apply button...")
         apply_btn = page.locator("button:has-text('Candidati ora'):not([disabled]):visible, a:has-text('Candidati ora'):visible").first
         await apply_btn.wait_for(state="visible", timeout=10000)
-        await apply_btn.click(force=True) # Forced click bypasses overlays
+        try:
+            await apply_btn.click(timeout=5000)
+        except PlaywrightTimeoutError:
+            await remove_cookie_overlays(page)
+            await apply_btn.click(force=True)
         await page.wait_for_load_state("networkidle")
 
         # --- STEP 2: Requirements checklist ---
