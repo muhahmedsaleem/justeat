@@ -4,7 +4,7 @@ import asyncio
 from playwright.async_api import async_playwright
 import requests
 
-# --- GITHUB SECRETS (Pulls safely from repository settings) ---
+# --- GITHUB SECRETS ---
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 FIRST_NAME = os.environ.get("FIRST_NAME")
@@ -29,7 +29,6 @@ def send_telegram(message: str):
 
 async def run():
     async with async_playwright() as p:
-        # headless MUST BE TRUE for GitHub Actions!
         browser = await p.chromium.launch(
             headless=True, 
             args=["--no-sandbox", "--disable-setuid-sandbox"]
@@ -40,7 +39,7 @@ async def run():
         )
         page = await context.new_page()
 
-        # --- BULLETPROOF SPA INTERACTION FUNCTION ---
+        # Helper function to handle SPA slide animations
         async def smart_action(locator_str, text_to_fill=None, retries=8):
             for attempt in range(retries):
                 elements = page.locator(locator_str)
@@ -146,10 +145,13 @@ async def run():
         if found_ebike:
             print("⚡ Electric bike option FOUND! Selecting it...")
             await smart_action("button:has-text('Procedi'), div[role='button']:has-text('Procedi')")
-            send_telegram(f"🎉 *Just Eat Pisa Alert!*\n\nElectric Bike selected for {TARGET_CITY}!\n{TARGET_URL}")
+            send_telegram(
+                f"🎉 *Just Eat Pisa Alert!*\n\n"
+                f"Electric Bike option was found and selected for *{TARGET_CITY}*!\n\n"
+                f"Link: {TARGET_URL}"
+            )
         else:
-            print("Electric bike is currently not listed among the available vehicles.")
-            send_telegram(f"⚠️ *Just Eat Alert ({TARGET_CITY})*\n\nReached Step 4, but *Electric Bike* is not available right now.")
+            print("Electric bike is not available right now. Exiting silently...")
 
         await browser.close()
 
