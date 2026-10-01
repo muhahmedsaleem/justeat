@@ -71,7 +71,8 @@ async def run():
                             await cb.check(force=True)
 
         print(f"Navigating to {TARGET_URL}...")
-        await page.goto(TARGET_URL, wait_until="networkidle")
+       # await page.goto(TARGET_URL, wait_until="networkidle")
+        await page.goto(TARGET_URL, wait_until="domcontentloaded")
 
         print("Neutralizing cookie banners...")
         await page.wait_for_timeout(2000)
