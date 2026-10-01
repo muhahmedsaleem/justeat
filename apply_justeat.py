@@ -68,7 +68,9 @@ async def run():
                     box = await cb.bounding_box()
                     if box and box['x'] >= 0 and box['width'] > 0:
                         if not await cb.is_checked():
-                            await cb.check(force=True)
+                            # Bypass Playwright's strict state check with raw Javascript
+                            await cb.evaluate("node => node.click()")
+                            #await cb.check(force=True)
 
         print(f"Navigating to {TARGET_URL}...")
        # await page.goto(TARGET_URL, wait_until="networkidle")
